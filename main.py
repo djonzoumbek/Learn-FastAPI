@@ -1,5 +1,5 @@
 import uvicorn
-from fastapi import FastAPI
+from fastapi import FastAPI, Form
 from pydantic import BaseModel
 from typing import Optional
 app = FastAPI()
@@ -40,6 +40,11 @@ async def read_component(number : int, text: str):
 async def make_position(coord: CoordIn ):
     return  coord #{"new_record": coord.dict()}
 
+
+
+@app.post("/login/")
+async def login(username : str = Form(...), password : str = Form(...)):
+    return {username : username}
 
 
 
