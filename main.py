@@ -1,52 +1,54 @@
-import uvicorn
-from fastapi import FastAPI, Form
+from fastapi import FastAPI, HTTPException
+from models import Todo, Todo_Pydantic, TodoIn_Pydantic
+from tortoise.contrib.fastapi import HTTPNotFoundError, RegisterTortoise, register_tortoise
 from pydantic import BaseModel
-from typing import Optional
+
+class Message(BaseModel):
+    message : str
+
 app = FastAPI()
 
+# Create new Todos
+@app.post("/todo", response_model=Todo_Pydantic)
+async def create(todo : TodoIn_Pydantic):
+    obj = await Todo.create(**todo.dict(exclude_unset=True))
+    return await Todo_Pydantic.from_tortoise_orm(obj)
+# Get one Todo
+@app.get("/todo/{id}", response_model=TodoIn_Pydantic, responses={404 : {"model": HTTPNotFoundError}})
+async def get_one(id : int):
+    return await Todo_Pydantic.from_queryset_single(Todo.get(id=id))
 
-class CoordIn(BaseModel):
-    password : str
-    lat: float
-    lon: float
-    zoom: Optional[int] = None
-    description : Optional[str] = None
+# Get Todos
+@app.get("/todos")
+async def todos():
+    return await Todo_Pydantic.from_queryset(Todo.all())
 
-class CoordOut(BaseModel):
-    lat: float
-    lon: float
-    zoom: Optional[int] = None
-    description : Optional[str] = None
+# update
+@app.put("/todo/{id}", response_model=Todo_Pydantic, responses={404: {"model": HTTPNotFoundError}})
+async def update_todo(id: int, todo: TodoIn_Pydantic):
+    updated_count = await Todo.filter(id=id).update(**todo.dict(exclude_unset=True))
 
+    if not updated_count:
+        raise HTTPException(status_code=404, detail="Todo not found")
 
-
-
-#
-# @app.get("/")
-# async def hello():
-#     return {"message": "Hello World"}
-#
-#
-# @app.get("/component/{component_id}") # path parameter
-# async def get_component(component_id: int):
-#     return {"component_id": component_id}
+    return await Todo_Pydantic.from_queryset_single(Todo.get(id=id))
 
 
-@app.get("/component/") # pour avoir plusieurs parametres. pour les paramettre obtionnneles on importe optional et on l'utilise
-async def read_component(number : int, text: str):
-    return {"number": number, "text": text}
+#Delete
 
-@app.post("/position/", response_model=CoordOut, response_model_exclude={"description"})
-async def make_position(coord: CoordIn ):
-    return  coord #{"new_record": coord.dict()}
-
-
-
-@app.post("/login/")
-async def login(username : str = Form(...), password : str = Form(...)):
-    return {username : username}
+@app.delete("/delete/{id}", response_model=Message, responses={404: {"model": HTTPNotFoundError}})
+async def delete_todo(id : int):
+    delete_obj = await Todo.filter(id=id)
+    if not delete_obj:
+        raise HTTPException(status_code=404, detail="This to is not fond..")
+    return Message(message="Successfull deleted !")
 
 
-
-if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+# make a connexion with sqlite db
+register_tortoise(
+    app,
+    db_url="sqlite://store.db",
+    modules={'models': ['models']},
+    generate_schemas=True,
+    add_exception_handlers=True
+)
